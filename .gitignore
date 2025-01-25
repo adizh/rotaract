@@ -1,0 +1,33 @@
+# Byte-compiled files
+*.pyc
+*.pyo
+__pycache__/
+
+# Environment folders
+env/
+venv/
+
+# Configuration files and secrets
+*.env
+*.DS_Store
+*.sqlite3  # Example for SQLite DB files (if any)
+
+# Logs
+*.log
+
+# Cache directories
+.cache/
+coverage/
+*.egg-info/
+
+# Jupyter Notebook checkpoints (if you're using Jupyter)
+.ipynb_checkpoints/
+
+# IDE/editor specific files
+.vscode/
+.idea/
+*.iml
+
+# OS-specific files
+Thumbs.db
+.DS_Store
