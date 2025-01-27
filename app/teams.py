@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify, Blueprint
 from flask_cors import CORS
 import mysql.connector
 import json
+from dotenv import load_dotenv
 import uuid
 from mysql.connector import Error
 #app = Flask(__name__)
 import os
 # Allow CORS only for the /get-all-teams route
 #CORS(app, resources={r"/get-all-teams": {"origins": "http://localhost:4500"}})
-
+load_dotenv()
 teams_bp = Blueprint('teams', __name__)
 
 DB_CONFIG = {
@@ -30,6 +31,7 @@ def get_all_teams():
         SELECT 
             teams.groupId, 
             teams.groupName, 
+            teams.meetingCount,
             teams.status,
             teams.projectName,
             teams.projectInfo,
@@ -61,15 +63,16 @@ def get_all_teams():
             team = {
                 'groupId': row[0],
                 'groupName': row[1],
-                'status': row[2],
-                'projectName': row[3],
-                'projectInfo': row[4],
-                'dateCreated': row[5],
+                'meetingCount': row[2],
+                'status': row[3],
+                'projectName': row[4],
+                'projectInfo': row[5],
+                'dateCreated': row[6],
                 'teamLeader': {
-                    'teamLeaderId': row[6],
-                    'teamLeaderName': row[7]
+                    'teamLeaderId': row[7],
+                    'teamLeaderName': row[8]
                 },
-                'volunteers': json.loads('[' + row[8] + ']') if row[8] else []  # Handling the volunteers as an object
+                'volunteers': json.loads('[' + row[9] + ']') if row[9] else []  # Handling the volunteers as an object
             }
             team_data.append(team)
 
@@ -111,15 +114,16 @@ def create_team():
 
         # Insert the new volunteer into the database
         insert_query = """
-        INSERT INTO teams (groupId,groupName, teamLeaderId, dateCreated, projectName, projectInfo)
-        VALUES (%s,%s, %s, %s, %s, %s)
+        INSERT INTO teams (groupId,groupName, teamLeaderId, dateCreated, projectName, projectInfo,meetingCount)
+        VALUES (%s,%s, %s, %s, %s, %s,%s)
         """
-        values = (groupId,data['groupName'], data['teamLeaderId'], data['dateCreated'], data['projectName'], data['projectInfo'])
+        values = (groupId,data['groupName'], data['teamLeaderId'], data['dateCreated'], data['projectName'], data['projectInfo'],0)
         
         cursor.execute(insert_query, values)
         connection.commit()
 
         # Return success response
+
         return jsonify({'message': 'Team created successfully!'}), 200
     except Error as e:
         # Handle database errors
@@ -244,6 +248,7 @@ def get_team_by_id(team_id):
         SELECT 
             teams.groupId, 
             teams.groupName, 
+            teams.meetingCount,
             teams.status,
             teams.projectName,
             teams.projectInfo,
@@ -274,15 +279,16 @@ def get_team_by_id(team_id):
             team = {
                 'groupId': result[0],
                 'groupName': result[1],
-                'status': result[2],
-                'projectName': result[3],
-                'projectInfo': result[4],
-                'dateCreated': result[5],
+                'meetingCount': result[2],
+                'status': result[3],
+                'projectName': result[4],
+                'projectInfo': result[5],
+                'dateCreated': result[6],
                 'teamLeader': {
-                    'teamLeaderId': result[6],
-                    'teamLeaderName': result[7]
+                    'teamLeaderId': result[7],
+                    'teamLeaderName': result[8]
                 },
-                'volunteers': json.loads('[' + result[8] + ']') if result[8] else []  # Handling the volunteers as an object
+                'volunteers': json.loads('[' + result[9] + ']') if result[9] else []  # Handling the volunteers as an object
             }
             # Close the database connection
             cursor.close()

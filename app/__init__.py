@@ -6,6 +6,7 @@ from app.teams import teams_bp
 from app.volunteers  import volunteers_bp
 from app.stats import stats_py;
 from app.tasks import tasks_bp
+from app.meetings import meetings_bp
  # Import the teams blueprint
 
 def create_app():
@@ -21,5 +22,6 @@ def create_app():
     app.register_blueprint(volunteers_bp, url_prefix='/volunteers')  # Routes under '/teams'
     app.register_blueprint(stats_py, url_prefix='/stats')  # Routes under '/teams'
     app.register_blueprint(tasks_bp, url_prefix='/tasks')  # Routes under '/teams'
+    app.register_blueprint(meetings_bp, url_prefix='/meetings')  # Routes under '/teams'
 
     return app

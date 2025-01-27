@@ -7,6 +7,7 @@ import os
 volunteers_bp = Blueprint('volunteers', __name__)
 DB_CONFIG = {
     'host': os.getenv('DB_HOST'),
+
     'user': os.getenv('DB_ROOT'),
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME')
@@ -27,7 +28,8 @@ def get_volunteer_by_id(volunteer_id):
                 lastName,
                 phone,
                 joinedAt,
-                groupId
+                groupId,
+                numOfMeetings
             FROM volunteers
             WHERE id = %s
         """, (volunteer_id,))
@@ -43,7 +45,8 @@ def get_volunteer_by_id(volunteer_id):
                 'lastName': result[2],
                 'phone': result[3],
                 'joinedAt': result[4],
-                'groupId': result[5]
+                'groupId': result[5],
+                'numOfMeetings': result[6],
             }
 
             # Close the database connection
@@ -76,7 +79,8 @@ def get_all_volunteers():
             v.phone, 
             v.joinedAt, 
             v.groupId, 
-            t.groupName AS groupName
+            t.groupName AS groupName,
+            t.numOfMeetings
         FROM 
             volunteers v
         LEFT JOIN 
@@ -176,11 +180,12 @@ def create_volunteer():
         connection = mysql.connector.connect(**DB_CONFIG)
         cursor = connection.cursor()
 
+
         # SQL query to insert the new volunteer
         cursor.execute("""
-            INSERT INTO volunteers (id,firstName, lastName, phone, joinedAt, groupId)
-            VALUES (%s,%s, %s, %s, %s, %s)
-        """, (id,first_name, last_name, phone, joined_at, group_id))
+            INSERT INTO volunteers (id,firstName, lastName, phone, joinedAt, groupId,numOfMeetings)
+            VALUES (%s,%s, %s, %s, %s, %s,%s)
+        """, (id,first_name, last_name, phone, joined_at, group_id,0))
 
         # Commit the transaction
         connection.commit()
@@ -269,7 +274,9 @@ def get_all_volunteers_by_group_id(group_id):
                     v.phone, 
                     v.joinedAt, 
                     v.groupId, 
-                    t.groupName AS groupName
+                    t.groupName AS groupName,
+                    v.numOfMeetings,
+                    t.meetingCount
                 FROM 
                     volunteers v
                 LEFT JOIN 
@@ -277,41 +284,54 @@ def get_all_volunteers_by_group_id(group_id):
                 ON 
                     v.groupId = t.groupId
                 WHERE 
-                    t.groupId = %s
+                    v.groupId = %s
             """
             cursor.execute(query, (group_id,))
             rows = cursor.fetchall()
 
-            # Transform the data to replace groupId with group object
-            transformed_rows = [
-                {
+            if not rows:
+                return jsonify({"error": "No volunteers found for the given groupId"}), 404
+
+            # Transform the data to add performance field
+            transformed_rows = []
+            for row in rows:
+                # Calculate performance as a percentage
+                num_of_meetings = int(row['numOfMeetings'] or 0)
+                meeting_count = int(row['meetingCount'] or 0)
+                
+                # Calculate performance as a percentage
+                performance = (num_of_meetings / meeting_count * 100) if meeting_count > 0 else 0
+
+                # Append the row with calculated performance
+                transformed_row = {
                     **row,
                     "group": {
                         "groupId": row["groupId"],
                         "groupName": row["groupName"]
-                    }
+                    },
+                    "performance": performance  # Add performance calculation
                 }
-                for row in rows
-            ]
-            
-            # Remove old groupId and groupName from the top level
-            for row in transformed_rows:
-                del row["groupId"]
-                del row["groupName"]
 
-        # Return the transformed rows
-        return jsonify(transformed_rows)
+                # Remove old groupId and groupName from the top level
+                del transformed_row["groupId"]
+                del transformed_row["groupName"]
+                
+                transformed_rows.append(transformed_row)
+
+            # Return the transformed rows
+            return jsonify(transformed_rows)
 
     except mysql.connector.Error as err:
         # Log the error for debugging
-       
-        return jsonify({"error": "Database query failed"}), 500
+        print(f"Database error: {err}")
+        return jsonify({"error": f"Database query failed: {err}"}), 500
 
     except Exception as e:
         # Log any other exceptions
-        
-        return jsonify({"error": "An error occurred"}), 500
+        print(f"Error: {e}")
+        return jsonify({"error": f"An error occurred: {e}"}), 500
 
     finally:
         if 'connection' in locals() and connection.is_connected():
             connection.close()
+
