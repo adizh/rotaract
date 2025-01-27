@@ -7,7 +7,6 @@ import os
 volunteers_bp = Blueprint('volunteers', __name__)
 DB_CONFIG = {
     'host': os.getenv('DB_HOST'),
-
     'user': os.getenv('DB_ROOT'),
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME')
