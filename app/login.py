@@ -10,7 +10,7 @@ from pymongo import MongoClient
 
 from app.hash import verify_password
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app",'https://scintillating-dasik-a1e6aa.netlify.app']}})  # Allow all origins for testing
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app","https://scintillating-dasik-a1e6aa.netlify.app"]}})  # Allow all origins for testing
 login_bp = Blueprint('login', __name__)
 # MySQL Database configuration
 
