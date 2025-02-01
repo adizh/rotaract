@@ -10,7 +10,7 @@ from bson import ObjectId
 import logging
 import os
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front.vercel.app"]}}) 
 #app = Flask(__name__)
 
 # Allow CORS only for the /get-all-teams route

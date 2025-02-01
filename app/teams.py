@@ -11,7 +11,7 @@ from .verify_token import verify_token
 from mysql.connector import Error
 app = Flask(__name__)
 import os
-CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front.vercel.app"]}}) 
 load_dotenv()
 teams_bp = Blueprint('teams', __name__)
 client = MongoClient(os.getenv('CONNECTION_STRING'))

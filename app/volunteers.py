@@ -7,7 +7,7 @@ from bson import ObjectId
 import os
 from flask_cors import CORS
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front.vercel.app"]}}) 
 # Create a blueprint for volunteers
 volunteers_bp = Blueprint('volunteers', __name__)
 client = MongoClient(os.getenv('CONNECTION_STRING'))

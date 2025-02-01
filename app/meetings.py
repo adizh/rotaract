@@ -13,7 +13,7 @@ load_dotenv()
 # Database configuration
 client = MongoClient(os.getenv('CONNECTION_STRING'))
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front.vercel.app"]}}) 
 database = client.rotaract
 
 @meetings_bp.route('/create-meeting/<groupId>', methods=['POST'])
