@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 main_bp = Blueprint('main', __name__)
 # Enable CORS for all routes and allow specific frontend origin
-CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front.vercel.app"]}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app"]}}) 
 
 DB_CONFIG = {
     'host': os.getenv('DB_HOST'),
