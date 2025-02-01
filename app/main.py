@@ -39,7 +39,6 @@ def test():
 def add_user():
    if request.method == 'OPTIONS':
         response = jsonify()
-        response.headers.add("Access-Control-Allow-Origin", "*")  # or "*"
         response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type")
         response.status_code = 200  # Ensure it's OK

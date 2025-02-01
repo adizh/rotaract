@@ -3,17 +3,18 @@ import mysql.connector
 import uuid
 from datetime import datetime
 import os
+import traceback
 from dotenv import load_dotenv
 app = Flask(__name__)
+from flask_cors import CORS
+from pymongo import MongoClient
 meetings_bp = Blueprint('meetings', __name__)
 load_dotenv()
 # Database configuration
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST'),
-    'user': os.getenv('DB_ROOT'),
-    'password': os.getenv('DB_PASSWORD'),
-    'database': os.getenv('DB_NAME')
-}
+client = MongoClient(os.getenv('CONNECTION_STRING'))
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}}) 
+database = client.rotaract
 
 @meetings_bp.route('/create-meeting/<groupId>', methods=['POST'])
 def create_meeting(groupId):
@@ -29,132 +30,201 @@ def create_meeting(groupId):
         # Validate input
         if not all([name, volunteer_ids]) or not isinstance(volunteer_ids, list):
             return jsonify({'error': 'Missing required fields or invalid volunteerId format'}), 400
-        
-        # Connect to the database
-        connection = mysql.connector.connect(**DB_CONFIG)
-        cursor = connection.cursor()
-        
+
         # Generate a unique meeting ID
         meeting_id = str(uuid.uuid4()).replace("-", "")[:12]
         
-        # Insert the meeting for each volunteer ID
+        # Prepare meeting data for insertion
+        meeting_data = {
+            "id": meeting_id,
+            "name": name,
+            "meetingInfo": meeting_info,
+            "format": format,
+            "dateCreated": date_created,
+            "volunteerId": volunteer_ids,  # List of volunteer IDs for this meeting
+            "groupId": groupId
+        }
+
+        # Insert the meeting into the meetings collection
+        meeting_result = database.meetings.insert_one(meeting_data)
+
+        # Update the volunteer collection to increment the number of meetings
         for volunteer_id in volunteer_ids:
-            unique_id = str(uuid.uuid4()).replace("-", "")[:12]
-            
-            # Insert the meeting into the meetings table
-            cursor.execute("""
-                INSERT INTO meetings (id, name, meetingInfo, format, dateCreated, volunteerId, groupId, unique_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (meeting_id, name, meeting_info, format, date_created, volunteer_id, groupId, unique_id))
-            
-            # Increment the numOfMeetings for the volunteer, handling NULL values
-            cursor.execute("""
-                UPDATE volunteers 
-                SET numOfMeetings = numOfMeetings + 1
-                WHERE id = %s
-            """, (volunteer_id,))
+            database.volunteers.update_one(
+                {"id": volunteer_id}, 
+                {"$inc": {"numOfMeetings": 1}}  # Increment numOfMeetings by 1
+            )
 
-        # Increment the meetingCount for the team (groupId), handling NULL values
-        cursor.execute("""
-            UPDATE teams 
-            SET meetingCount = meetingCount + 1
-            WHERE groupId = %s
-        """, (groupId,))
+        # Increment the meeting count for the team (groupId)
+        database.teams.update_one(
+        {"groupId": groupId}, 
+        {"$inc": {"meetingCount": 1}}
+)
+   
+        
 
-        # Commit the transaction
-        connection.commit()
-
-        # Close the database connection
-        cursor.close()
-        connection.close()
 
         return jsonify({'message': 'Meeting created successfully for all volunteers!'}), 200
 
-    except mysql.connector.Error as err:
-        return jsonify({'error': str(err)}), 500
     except Exception as e:
+        # Log the error for debugging
+       
         return jsonify({'error': str(e)}), 500
 
 
+
+from bson import ObjectId
+
+
+
+
+
+from .verify_token import verify_token
 
 @meetings_bp.route('/fetch-all-meetings', methods=['GET'])
+
 def fetch_all_meetings():
+    decoded_token = verify_token()
+    if decoded_token is None:
+         return jsonify({'error': 'Token is invalid or expired'}), 401
     try:
-        # Connect to the database
-        connection = mysql.connector.connect(**DB_CONFIG)
-        cursor = connection.cursor()
+        pipeline = [
+            # 1. Lookup teams collection to get groupName and teamLeaderId
+            {
+                "$lookup": {
+                    "from": "teams",
+                    "localField": "groupId",
+                    "foreignField": "groupId",
+                    "as": "teamDetails"
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$teamDetails",
+                    "preserveNullAndEmptyArrays": True
+                }
+            },
 
-        # SQL query to fetch meetings with volunteers and team leader info
-        cursor.execute("""
-            SELECT 
-                m.id, 
-                m.unique_id,
-                m.name, 
-                m.groupId, 
-                m.format, 
-                m.meetingInfo, 
-                m.dateCreated,
-                v.firstName AS volunteerFirstName,
-                v.lastName AS volunteerLastName,
-                v.id AS volunteerId,
-                tl.firstName AS teamLeaderFirstName,
-                tl.lastName AS teamLeaderLastName,
-                tl.id AS teamLeaderId
-            FROM 
-                meetings m
-            LEFT JOIN 
-                volunteers v ON m.volunteerId = v.id
-            LEFT JOIN 
-                teams t ON m.groupId = t.groupId
-            LEFT JOIN 
-                volunteers tl ON t.teamLeaderId = tl.id
-        """)
+            # 2. Lookup volunteers collection to get teamLeader details
+            {
+                "$lookup": {
+                    "from": "volunteers",
+                    "localField": "teamDetails.teamLeaderId",
+                    "foreignField": "id",
+                    "as": "teamLeaderDetails"
+                }
+            },
+            {
+                "$unwind": {
+                    "path": "$teamLeaderDetails",
+                    "preserveNullAndEmptyArrays": True
+                }
+            },
 
-        # Fetch all rows
-        rows = cursor.fetchall()
+            # 3. Lookup volunteers for volunteerId (transform array of IDs into objects)
+            {
+                "$lookup": {
+                    "from": "volunteers",
+                    "localField": "volunteerId",
+                    "foreignField": "id",
+                    "as": "volunteerDetails"
+                }
+            },
 
-        # Group results by meeting ID
-        meetings = {}
-        for row in rows:
-            meeting_id = row[0]
-            if meeting_id not in meetings:
-                # Initialize meeting structure if not already added
-                meetings[meeting_id] = {
-                    'id': row[0],
-                    'unique_id': row[1],
-                    'name': row[2],
-                    'groupId': row[3],
-                    'format': row[4],
-                    'meetingInfo': row[5],
-                    'dateCreated': row[6],
-                    'volunteers': [],
-                    'teamLeader': {
-                        'firstName': row[10],
-                        'lastName': row[11],
-                        'teamLeaderId': row[12]
+            # 4. Remove unnecessary fields before grouping
+            {
+                "$project": {
+                    "groupId": 1,
+                    "groupName": "$teamDetails.groupName",
+                    "teamLeaderId": "$teamDetails.teamLeaderId",
+                    "firstName": "$teamLeaderDetails.firstName",
+                    "lastName": "$teamLeaderDetails.lastName",
+                    "meetingId": "$_id",
+                    "id": 1,
+                    "name": 1,
+                    "meetingInfo": 1,
+                    "format": 1,
+                    "dateCreated": 1,
+                    "groupId": 1,
+
+                    # Transform volunteerId into objects
+                    "volunteers": {
+                        "$map": {
+                            "input": "$volunteerDetails",
+                            "as": "vol",
+                            "in": {
+                                "volunteerId": "$$vol.id",
+                                "firstName": "$$vol.firstName",
+                                "lastName": "$$vol.lastName"
+                            }
+                        }
                     }
                 }
+            },
 
-            # Append volunteer information for this meeting
-            if row[7] and row[8] and row[9]:  # Check if volunteer info exists
-                meetings[meeting_id]['volunteers'].append({
-                    'firstName': row[7],
-                    'lastName': row[8],
-                    'volunteerId': row[9]
-                })
+            # 5. Group by groupId
+            {
+                "$group": {
+                    "_id": "$groupId",
+                    "groupId": { "$first": "$groupId" },
+                    "groupName": { "$first": "$groupName" },
+                    "teamLeader": {
+                        "$first": {
+                            "teamLeaderId": "$teamLeaderId",
+                            "firstName": "$firstName",
+                            "lastName": "$lastName"
+                        }
+                    },
+                    "meetings": { 
+                        "$push": {
+                            "meetingId": "$meetingId",
+                            "id": "$id",
+                            "name": "$name",
+                            "meetingInfo": "$meetingInfo",
+                            "format": "$format",
+                            "dateCreated": "$dateCreated",
+                            "volunteers": "$volunteers",
+                            "groupId": "$groupId"
+                        }
+                    }
+                }
+            },
 
-        # Close the database connection
-        cursor.close()
-        connection.close()
+            # 6. Final Projection
+            {
+                "$project": {
+                    "_id": 1,
+                    "groupId": 1,
+                    "groupName": 1,
+                    "teamLeader": 1,
+                    "meetings": 1
+                }
+            }
+        ]
 
-        # Convert meetings dictionary to a list
-        return jsonify({'meetings': list(meetings.values())}), 200
+        grouped_meetings = list(database.meetings.aggregate(pipeline))
 
-    except mysql.connector.Error as err:
-        return jsonify({'error': str(err)}), 500
+        # Convert ObjectId fields to strings
+        def convert_objectid(obj):
+            """ Recursively convert ObjectId fields to strings in dictionaries/lists """
+            if isinstance(obj, dict):
+                return {k: convert_objectid(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_objectid(i) for i in obj]
+            elif isinstance(obj, ObjectId):
+                return str(obj)
+            return obj
+
+        grouped_meetings = convert_objectid(grouped_meetings)
+
+        return jsonify({'meetings': grouped_meetings}), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    
+
+
+
+
 
 
 
@@ -163,114 +233,107 @@ def fetch_all_meetings():
 @meetings_bp.route('/delete-meeting/<string:meeting_id>', methods=['DELETE'])
 def delete_meeting(meeting_id):
     try:
-        # Connect to the database
-        connection = mysql.connector.connect(**DB_CONFIG)
-        cursor = connection.cursor()
+        # Validate ObjectId
+
 
         # Check if the meeting exists
-        cursor.execute("SELECT id FROM meetings WHERE id = %s", (meeting_id,))
-        meeting = cursor.fetchone()
+        meeting = database.meetings.find_one({"id": meeting_id})
         
-        # If meeting doesn't exist
         if not meeting:
             return jsonify({'error': 'Meeting not found'}), 404
 
-        # Ensure no unread results exist
-        cursor.fetchall()  # Read any remaining result sets
-
         # Delete the meeting
-        cursor.execute("DELETE FROM meetings WHERE id = %s", (meeting_id,))
-        connection.commit()
-
-        # Close the database connection
-        cursor.close()
-        connection.close()
+        result = database.meetings.delete_one({"id": meeting_id})
+        
+        if result.deleted_count == 0:
+            return jsonify({'error': 'Failed to delete meeting'}), 500
 
         return jsonify({'message': 'Meeting deleted successfully'}), 200
 
-    except mysql.connector.Error as err:
-        return jsonify({'error': str(err)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-        
 
 
 @meetings_bp.route('/fetch-all-meetings-groupId/<group_id>', methods=['GET'])
 def fetch_all_meetings_by_groupId(group_id):
     try:
-        # Connect to the database
-        connection = mysql.connector.connect(**DB_CONFIG)
-        cursor = connection.cursor()
+        # MongoDB aggregation pipeline
+        pipeline = [
+            {"$match": {"groupId": group_id}},
 
-        # SQL query to fetch meetings with volunteers and team leader info, filtered by groupId
-        cursor.execute("""
-            SELECT 
-                m.id, 
-                m.unique_id,
-                m.name, 
-                m.groupId, 
-                m.format, 
-                m.meetingInfo, 
-                m.dateCreated,
-                v.firstName AS volunteerFirstName,
-                v.lastName AS volunteerLastName,
-                v.id AS volunteerId,
-                tl.firstName AS teamLeaderFirstName,
-                tl.lastName AS teamLeaderLastName,
-                tl.id AS teamLeaderId
-            FROM 
-                meetings m
-            LEFT JOIN 
-                volunteers v ON m.volunteerId = v.id
-            LEFT JOIN 
-                teams t ON m.groupId = t.groupId
-            LEFT JOIN 
-                volunteers tl ON t.teamLeaderId = tl.id
-            WHERE 
-                m.groupId = %s
-        """, (group_id,))
+            # Lookup volunteers (volunteerId -> volunteers)
+            {
+                "$lookup": {
+                    "from": "volunteers",
+                    "localField": "volunteerId",
+                    "foreignField": "id",
+                    "as": "volunteers"
+                }
+            },
 
-        # Fetch all rows
-        rows = cursor.fetchall()
+            # Lookup teams (groupId -> teams)
+            {
+                "$lookup": {
+                    "from": "teams",
+                    "localField": "groupId",
+                    "foreignField": "groupId",
+                    "as": "team"
+                }
+            },
 
-        # Group results by meeting ID
-        meetings = {}
-        for row in rows:
-            meeting_id = row[0]
-            if meeting_id not in meetings:
-                # Initialize meeting structure if not already added
-                meetings[meeting_id] = {
-                    'id': row[0],
-                    'unique_id': row[1],
-                    'name': row[2],
-                    'groupId': row[3],
-                    'format': row[4],
-                    'meetingInfo': row[5],
-                    'dateCreated': row[6],
-                    'volunteers': [],
-                    'teamLeader': {
-                        'firstName': row[10],
-                        'lastName': row[11],
-                        'teamLeaderId': row[12]
+            {"$unwind": "$team"},  # Extract team object
+
+            # Lookup team leader info (team.teamLeaderId -> volunteers)
+            {
+                "$lookup": {
+                    "from": "volunteers",
+                    "localField": "team.teamLeaderId",
+                    "foreignField": "id",
+                    "as": "teamLeader"
+                }
+            },
+
+            {"$unwind": "$teamLeader"},  # Extract team leader object
+
+            # Format the final output
+            {
+                "$project": {
+                    "_id": 0,
+                    "id": "$id",
+                    "name": "$name",
+                    "groupId": "$groupId",
+                    "format": "$format",
+                    "meetingInfo": "$meetingInfo",
+                    "dateCreated": "$dateCreated",
+
+                    # Collect volunteers as an array of objects
+                    "volunteers": {
+                        "$map": {
+                            "input": "$volunteers",
+                            "as": "volunteer",
+                            "in": {
+                                "firstName": "$$volunteer.firstName",
+                                "lastName": "$$volunteer.lastName",
+                                "volunteerId": "$$volunteer.id"
+                            }
+                        }
+                    },
+
+                    # Keep teamLeader as a single object
+                    "teamLeader": {
+                        "firstName": "$teamLeader.firstName",
+                        "lastName": "$teamLeader.lastName",
+                        "teamLeaderId": "$teamLeader.id"
                     }
                 }
+            }
+        ]
 
-            # Append volunteer information for this meeting
-            if row[7] and row[8] and row[9]:  # Check if volunteer info exists
-                meetings[meeting_id]['volunteers'].append({
-                    'firstName': row[7],
-                    'lastName': row[8],
-                    'volunteerId': row[9]
-                })
+        # Execute aggregation
+        meetings = list(database.meetings.aggregate(pipeline))
 
-        # Close the database connection
-        cursor.close()
-        connection.close()
+        # Return response
+        return jsonify({'meetings': meetings}), 200
 
-        # Convert meetings dictionary to a list and return
-        return jsonify({'meetings': list(meetings.values())}), 200
-
-    except mysql.connector.Error as err:
-        return jsonify({'error': str(err)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500

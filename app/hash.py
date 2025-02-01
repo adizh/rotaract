@@ -12,7 +12,7 @@ def hash_password(password: str) -> str:
 
 # Example user data
 
-plain_password = ''  # Password to be hashed
+plain_password = 'F%#DHgd67!@)'  # Password to be hashed
 
 # Hash the password
 hashed_password = hash_password(plain_password)
@@ -30,3 +30,8 @@ def verify_password(comingPassword: str, hashed_password: str) -> bool:
 
 con=verify_password(plain_password,hashed_password)
 print('con',con)
+import secrets
+
+SECRET_KEY = secrets.token_hex(32)  # Generates a secure 64-character hexadecimal string
+print('SECRET_KEY',SECRET_KEY)
+

@@ -11,7 +11,6 @@ from app.meetings import meetings_bp
 
 def create_app():
     app = Flask(__name__)
-
     # Apply CORS globally here, for all routes
     CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}},supports_credentials=True)
 
