@@ -12,7 +12,7 @@ from app.meetings import meetings_bp
 def create_app():
     app = Flask(__name__)
     # Apply CORS globally here, for all routes
-    CORS(app, resources={r"/*": {"origins": "http://localhost:4500"}},supports_credentials=True)
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:4500",' https://scintillating-dasik-a1e6aa.netlify.app','https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app']}},supports_credentials=True)
 
     # Register blueprints
     app.register_blueprint(login_bp, url_prefix='/auth')  # Routes under '/auth'
