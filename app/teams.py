@@ -11,7 +11,7 @@ from .verify_token import verify_token
 from mysql.connector import Error
 app = Flask(__name__)
 import os
-CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app",'https://scintillating-dasik-a1e6aa.netlify.app']}}) 
+CORS(app, resources={r"/*": {"origins": ["http://localhost:4500", "https://rotaract-front-17bdmy7ft-adizhs-projects.vercel.app","https://scintillating-dasik-a1e6aa.netlify.app"]}}) 
 load_dotenv()
 teams_bp = Blueprint('teams', __name__)
 client = MongoClient(os.getenv('CONNECTION_STRING'))
@@ -84,6 +84,11 @@ def get_all_teams():
 
 teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
 def create_team():
+    if request.method == 'OPTIONS':
+        response = jsonify({'message': 'CORS preflight successful'})
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        return response, 200
     # Handle OPTIONS request for CORS pre-flight
 
     # Get data from the request
