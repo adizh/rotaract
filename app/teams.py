@@ -85,12 +85,6 @@ def get_all_teams():
 teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
 def create_team():
     # Handle OPTIONS request for CORS pre-flight
-    if request.method == 'OPTIONS':
-        response = jsonify()
-        response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        response.status_code = 200
-        return response
 
     # Get data from the request
     data = request.get_json()
