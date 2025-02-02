@@ -82,7 +82,7 @@ def get_all_teams():
    
 
 
-teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
+@teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
 def create_team():
     if request.method == 'OPTIONS':
         response = jsonify({'message': 'CORS preflight successful'})
