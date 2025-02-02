@@ -82,7 +82,7 @@ def get_all_teams():
    
 
 
-@teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
+teams_bp.route('/create-team', methods=['POST', 'OPTIONS'])
 def create_team():
     # Handle OPTIONS request for CORS pre-flight
     if request.method == 'OPTIONS':
@@ -98,7 +98,7 @@ def create_team():
     # Validate required fields
     required_fields = ['groupName', 'teamLeaderId', 'dateCreated', 'projectName', 'projectInfo']
     missing_fields = [field for field in required_fields if field not in data]
-    
+
     if missing_fields:
         return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
 
@@ -114,20 +114,30 @@ def create_team():
         "projectName": data['projectName'],
         "projectInfo": data['projectInfo'],
         "meetingCount": 0,
-        "status":'1'
+        "status": '1'
     }
 
     try:
         # Insert the new team into the MongoDB collection
         result = database.teams.insert_one(team_data)
 
-        # Check if insertion was successful (result.inserted_id is populated if success)
         if result.inserted_id:
-            return jsonify({'message': 'Team created successfully!'}), 200
+            # Assign the same groupId to the team leader in the volunteers collection
+            volunteers_result = database.volunteers.update_one(
+                {'volunteerId': data['teamLeaderId']},  # Find the team leader
+                {'$set': {'groupId': group_id}}  # Assign the same groupId
+            )
+
+            # Check if the volunteer was updated
+            if volunteers_result.matched_count > 0:
+                return jsonify({'message': 'Team created successfully and team leader assigned!'}), 200
+            else:
+                return jsonify({'message': 'Team created, but team leader not found in volunteers collection'}), 200
+
         else:
             return jsonify({'error': 'Failed to create team'}), 500
+
     except Exception as e:
-        # Handle errors from MongoDB
         return jsonify({'error': str(e)}), 500
 
 
