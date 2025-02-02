@@ -87,7 +87,6 @@ def create_team():
     # Handle OPTIONS request for CORS pre-flight
     if request.method == 'OPTIONS':
         response = jsonify()
-        response.headers.add("Access-Control-Allow-Origin", "http://localhost:4500")
         response.headers.add("Access-Control-Allow-Methods", "POST, OPTIONS")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type")
         response.status_code = 200
@@ -135,7 +134,6 @@ def create_team():
 @teams_bp.route('/delete-team/<string:team_id>', methods=['DELETE', 'OPTIONS'])
 def delete_team(team_id):
     if request.method == 'OPTIONS':
-        # Respond to the preflight request with appropriate headers
         response = jsonify({"message": "CORS preflight successful"})
         response.headers['Access-Control-Allow-Methods'] = 'DELETE, OPTIONS'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
@@ -143,27 +141,33 @@ def delete_team(team_id):
 
     if request.method == 'DELETE':
         try:
-            # Perform the delete operation for the team
-            result = database.teams.delete_one({'groupId': team_id})
+            # Delete the team
+            team_result = database.teams.delete_one({'groupId': team_id})
 
-            # Check if the document was actually deleted
-            if result.deleted_count == 0:
+            if team_result.deleted_count == 0:
                 return jsonify({'message': 'Team not found'}), 404
 
-            # Update the volunteers collection to set groupId to empty string for volunteers with the same groupId
-            volunteers_update_result = database.volunteers.update_many(
-                {'groupId': team_id},  # Find volunteers with the same groupId
-                {'$set': {'groupId': ''}}  # Set their groupId to an empty string
+            # Delete all meetings associated with the team
+            meetings_result = database.meetings.delete_many({'groupId': team_id})
+
+            # Update volunteers collection by setting groupId to an empty string
+            volunteers_result = database.volunteers.update_many(
+                {'groupId': team_id},
+                {'$set': {'groupId': ''}}
             )
 
-            # Check if any volunteers were updated
-            if volunteers_update_result.modified_count > 0:
-                return jsonify({'message': 'Team deleted and volunteers updated successfully'}), 200
-            else:
-                return jsonify({'message': 'Team deleted, but no volunteers found with the given groupId'}), 200
+            message = "Team deleted successfully"
+            if meetings_result.deleted_count > 0:
+                message += f", {meetings_result.deleted_count} meetings deleted"
+            if volunteers_result.modified_count > 0:
+                message += f", {volunteers_result.modified_count} volunteers updated"
+
+            return jsonify({'message': message}), 200
 
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            app.logger.error(f"Error deleting team {team_id}: {str(e)}")  # Log error
+            return jsonify({'error': 'An internal error occurred'}), 500
+
 
 
 @teams_bp.route('/update-team/<string:team_id>', methods=['PUT'])
