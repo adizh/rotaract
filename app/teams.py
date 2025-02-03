@@ -123,7 +123,7 @@ def create_team():
         if result.inserted_id:
             # Assign the same groupId to the team leader in the volunteers collection
             volunteers_result = database.volunteers.update_one(
-                {'volunteerId': data['teamLeaderId']},  # Find the team leader
+                {'id': data['teamLeaderId']},  # Find the team leader
                 {'$set': {'groupId': group_id}}  # Assign the same groupId
             )
 
